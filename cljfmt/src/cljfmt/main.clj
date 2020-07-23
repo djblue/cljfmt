@@ -101,6 +101,14 @@
   ([a]   a)
   ([a b] (merge-with + a b)))
 
+(defn- stdin [options]
+  (let [original (slurp *in*)]
+    (try
+      (let [revised (reformat-string options original)]
+        (spit *out* revised))
+      (catch Exception _e
+        (spit *out* original)))))
+
 (defn check
   "Checks that the Clojure files contained in `paths` follow the formatting
   (as per `options`)."
@@ -199,12 +207,19 @@
         [cmd & paths] (:arguments parsed-opts)
         options       (merge-default-options (:options parsed-opts))
         paths         (or (seq paths) (filter file-exists? default-paths))]
-    (if (:errors parsed-opts)
+    (cond
+      (:errors parsed-opts)
       (abort (:errors parsed-opts))
-      (if (or (nil? cmd) (:help options))
-        (do (println "cljfmt [OPTIONS] COMMAND [PATHS ...]")
-            (println (:summary parsed-opts)))
-        (case cmd
-          "check" (check paths options)
-          "fix"   (fix paths options)
-          (abort "Unknown cljfmt command:" cmd))))))
+
+      (nil? cmd) (stdin options)
+
+      (:help options)
+      (do (println "cljfmt [OPTIONS] COMMAND [PATHS ...]")
+          (println (:summary parsed-opts)))
+
+      (= cmd "check") (check paths options)
+
+      (= cmd "fix")   (fix paths options)
+
+      :else
+      (abort "Unknown cljfmt command:" cmd))))
